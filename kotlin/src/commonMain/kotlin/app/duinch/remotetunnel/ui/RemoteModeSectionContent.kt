@@ -1,0 +1,292 @@
+package app.duinch.remotetunnel.ui
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+@Composable
+internal fun RemoteModeContent(
+    initialTarget: String,
+    telemetry: RemoteTelemetryData,
+    recentTunnels: List<String> = emptyList(),
+    onConnect: (String) -> Unit,
+    onDisconnect: () -> Unit,
+    onScanQr: () -> Unit,
+    onOpenPairing: (() -> Unit)? = null
+) {
+    var remoteText by remember(initialTarget) { mutableStateOf(initialTarget) }
+    var isEditingUrl by remember { mutableStateOf(false) }
+    var editUrlInput by remember(remoteText) { mutableStateOf(remoteText) }
+    var detectedLanHost by remember { mutableStateOf<String?>(null) }
+    var dismissedHandover by remember { mutableStateOf(false) }
+
+    val isRemoteConnected = telemetry.state == RemoteConnectionState.Connected &&
+        (telemetry.channel == RemoteTransportChannel.QuickTunnel || telemetry.channel == RemoteTransportChannel.WebRtcDirect)
+    val isRemoteConnecting = telemetry.state == RemoteConnectionState.Connecting &&
+        (telemetry.channel == RemoteTransportChannel.QuickTunnel || telemetry.channel == RemoteTransportChannel.WebRtcDirect)
+    val isUsbActive = telemetry.channel == RemoteTransportChannel.UsbCable
+
+    val dotColor = when {
+        isRemoteConnected -> Color(0xFF10B981) // Green
+        isRemoteConnecting -> Color(0xFFF59E0B) // Yellow/Amber
+        else -> Color(0xFF94A3B8) // Slate Gray (unconnected)
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Case 2: Handover Banner khi đang chạy Remote mà phát hiện chung Wi-Fi
+        if (isRemoteConnected && detectedLanHost != null && !dismissedHandover) {
+            LanHandoverBanner(
+                lanHost = detectedLanHost!!,
+                onSwitch = {
+                    onDisconnect()
+                    onConnect(detectedLanHost!!)
+                },
+                onDismiss = { dismissedHandover = true }
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+        }
+
+        // 1. Inline Tunnel URL & Prominent QR Scan Button Row
+        if (isEditingUrl) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = editUrlInput,
+                    onValueChange = { editUrlInput = it },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    placeholder = { Text("Dán link máy chủ từ xa", fontSize = 12.sp) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        remoteText = editUrlInput.trim()
+                        isEditingUrl = false
+                    }),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                IconButton(
+                    onClick = {
+                        remoteText = editUrlInput.trim()
+                        isEditingUrl = false
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = "Lưu", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
+                }
+                IconButton(
+                    onClick = {
+                        editUrlInput = remoteText
+                        isEditingUrl = false
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = "Hủy", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                }
+            }
+        } else {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = if (remoteText.isNotBlank()) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                },
+                border = BorderStroke(
+                    1.dp,
+                    if (remoteText.isNotBlank()) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(9.dp)
+                            .background(dotColor, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        val displayStatus = when {
+                            remoteText.isBlank() -> "Chưa có đường truyền từ xa"
+                            remoteText.contains("trycloudflare.com") -> {
+                                val hostShort = remoteText.removePrefix("https://").removePrefix("http://").substringBefore(".trycloudflare.com").take(18)
+                                "$hostShort..."
+                            }
+                            else -> remoteText.removePrefix("https://").removePrefix("http://")
+                        }
+                        Text(
+                            text = displayStatus,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontFamily = if (remoteText.isNotBlank()) FontFamily.Monospace else null,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            ),
+                            color = if (remoteText.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        val subtitle = when {
+                            isRemoteConnected -> "Đã kết nối thông suốt với máy tính"
+                            isRemoteConnecting -> "Đang thiết lập kênh truyền bảo mật..."
+                            remoteText.isNotBlank() -> "Đã sẵn sàng đường truyền P2P / Cloudflare"
+                            else -> "Quét mã QR trên máy tính hoặc nhập URL"
+                        }
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Recent Tunnels (thay thế khung info specs khi chưa kết nối)
+        RecentTunnelsSection(
+            recentTunnels = recentTunnels,
+            selectedUrl = remoteText,
+            onSelectTunnel = {
+                remoteText = it
+                editUrlInput = it
+            }
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // 4. Action Row: [Quét QR] + [Nhập URL] + [Kết Nối] hoặc [Ngắt Kết Nối] + [Ghép Đôi]
+        if (isRemoteConnected) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val disconnectMod = if (onOpenPairing != null) Modifier.weight(1.3f) else Modifier.fillMaxWidth()
+                Button(
+                    onClick = onDisconnect,
+                    modifier = disconnectMod.height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
+                ) {
+                    Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (onOpenPairing != null) "Ngắt Kết Nối" else "Ngắt Kết Nối Từ Xa", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                }
+
+                if (onOpenPairing != null) {
+                    OutlinedButton(
+                        onClick = onOpenPairing,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Ghép đôi", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
+                    }
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onScanQr,
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Quét QR", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        editUrlInput = remoteText
+                        isEditingUrl = true
+                    },
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Nhập URL", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                }
+
+                Button(
+                    onClick = {
+                        if (isRemoteConnecting) onDisconnect()
+                        else if (remoteText.isNotBlank()) onConnect(remoteText.trim())
+                    },
+                    enabled = remoteText.isNotBlank() || isRemoteConnecting,
+                    modifier = Modifier.weight(1.15f).height(44.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (isRemoteConnecting) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                    } else {
+                        Icon(Icons.Default.FlashOn, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Kết Nối", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, softWrap = false)
+                    }
+                }
+            }
+        }
+    }
+}

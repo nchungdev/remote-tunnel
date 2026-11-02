@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+if command -v gitleaks >/dev/null 2>&1; then
+  echo "[pre-commit] Running gitleaks staged secret scan..."
+  gitleaks protect --staged --redact --no-banner
+fi
+if [ -f "$ROOT_DIR/scripts/check_project.py" ]; then
+  echo "[pre-commit] Running remote-tunnel hygiene, secret/IP & LOC verification..."
+  python3 "$ROOT_DIR/scripts/check_project.py"
+fi
