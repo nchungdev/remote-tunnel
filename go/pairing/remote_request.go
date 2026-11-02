@@ -18,6 +18,11 @@ func (h *Hub) SubmitRemoteTunnelRequest(deviceID, deviceName string) *RemoteTunn
 	defer h.mu.Unlock()
 	h.cleanupExpiredLocked()
 
+	// Hard cap: reject if pending requests exceed limit
+	if len(h.remoteRequests) >= MaxPendingRequests {
+		return nil
+	}
+
 	req := &RemoteTunnelRequest{
 		DeviceID:   deviceID,
 		DeviceName: deviceName,

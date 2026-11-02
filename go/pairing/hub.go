@@ -13,11 +13,14 @@ type PairingRequest struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+const MaxPendingRequests = 10
+
 type Hub struct {
 	mu             sync.RWMutex
 	requests       map[string]*PairingRequest
 	remoteRequests map[string]*RemoteTunnelRequest
 	ttl            time.Duration
+	limiter        *IPRateLimiter
 }
 
 func NewHub(ttl time.Duration) *Hub {
@@ -28,13 +31,23 @@ func NewHub(ttl time.Duration) *Hub {
 		requests:       make(map[string]*PairingRequest),
 		remoteRequests: make(map[string]*RemoteTunnelRequest),
 		ttl:            ttl,
+		limiter:        NewIPRateLimiter(5, 1*time.Minute),
 	}
+}
+
+func (h *Hub) CheckRateLimit(ip string) bool {
+	return h.limiter.Allow(ip)
 }
 
 func (h *Hub) SubmitRequest(deviceID, deviceName, code string) *PairingRequest {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.cleanupExpiredLocked()
+
+	// Hard cap: reject if pending requests exceed limit
+	if len(h.requests) >= MaxPendingRequests {
+		return nil
+	}
 
 	req := &PairingRequest{
 		DeviceID:   deviceID,
