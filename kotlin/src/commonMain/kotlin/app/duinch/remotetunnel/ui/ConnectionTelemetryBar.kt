@@ -55,7 +55,7 @@ fun ConnectionTelemetryBar(
 
     val statusText = when (telemetry.state) {
         RemoteConnectionState.Connected -> "ĐÃ KẾT NỐI"
-        RemoteConnectionState.Connecting -> "ĐANG NỐI..."
+        RemoteConnectionState.Connecting -> "ĐANG KẾT NỐI..."
         RemoteConnectionState.Disconnected -> "CHƯA KẾT NỐI"
     }
 

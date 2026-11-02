@@ -145,9 +145,9 @@ fun DualChannelConnectContent(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val (badgeText, badgeBg, badgeFg) = when (telemetry.state) {
-                        RemoteConnectionState.Connected -> Triple("ĐÃ NỐI", Color(0xFFE8F5E9), Color(0xFF2E7D32))
-                        RemoteConnectionState.Connecting -> Triple("ĐANG NỐI...", MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
-                        else -> Triple("CHƯA NỐI", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
+                        RemoteConnectionState.Connected -> Triple("ĐÃ KẾT NỐI", Color(0xFFE8F5E9), Color(0xFF2E7D32))
+                        RemoteConnectionState.Connecting -> Triple("ĐANG KẾT NỐI...", MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
+                        else -> Triple("CHƯA KẾT NỐI", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Surface(
                         shape = RoundedCornerShape(6.dp),

@@ -35,6 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -71,12 +72,19 @@ internal fun LanModeContent(
 
     val isLanConnected = telemetry.state == RemoteConnectionState.Connected && telemetry.channel == RemoteTransportChannel.LanWifi
     val isLanConnecting = telemetry.state == RemoteConnectionState.Connecting && telemetry.channel == RemoteTransportChannel.LanWifi
-    val isUsbActive = telemetry.channel == RemoteTransportChannel.UsbCable
+    val showInlineSetup = isEditingHost || currentHost.isBlank()
+    val effectiveTarget = if (showInlineSetup) editHostInput.trim() else currentHost.trim()
+
+    LaunchedEffect(Unit) {
+        if (currentHost.isBlank()) {
+            onMdnsScan?.invoke()
+        }
+    }
 
     val dotColor = when {
-        isLanConnected -> Color(0xFF10B981) // Green
-        isLanConnecting -> Color(0xFFF59E0B) // Yellow/Amber
-        else -> Color(0xFF94A3B8) // Slate Gray (unconnected)
+        isLanConnected -> Color(0xFF10B981)
+        isLanConnecting -> Color(0xFFF59E0B)
+        else -> Color(0xFF94A3B8)
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -90,8 +98,13 @@ internal fun LanModeContent(
                 onCancel = { isPairingRequested = false }
             )
         } else {
-            // Discovered Host Item (Inline Edit: IP address + Edit icon button)
-            if (isEditingHost) {
+            if (showInlineSetup) {
+                Text(
+                    text = "Nhập địa chỉ IP máy chủ hoặc bấm Quét lại để tự tìm:",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -111,41 +124,23 @@ internal fun LanModeContent(
                         }),
                         shape = RoundedCornerShape(10.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(
-                        onClick = {
-                            if (editHostInput.isNotBlank()) {
-                                currentHost = editHostInput.trim()
-                                isEditingHost = false
-                            }
-                        },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = "Lưu", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
-                    }
-                    IconButton(
-                        onClick = {
-                            editHostInput = currentHost
-                            isEditingHost = false
-                        },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Hủy", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                    if (currentHost.isNotBlank()) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = { if (editHostInput.isNotBlank()) { currentHost = editHostInput.trim(); isEditingHost = false } },
+                            modifier = Modifier.size(36.dp)
+                        ) { Icon(Icons.Default.Check, contentDescription = "Lưu", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp)) }
+                        IconButton(
+                            onClick = { editHostInput = currentHost; isEditingHost = false },
+                            modifier = Modifier.size(36.dp)
+                        ) { Icon(Icons.Default.Close, contentDescription = "Hủy", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
                     }
                 }
             } else {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = if (currentHost.isNotBlank()) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                    },
-                    border = BorderStroke(
-                        1.dp,
-                        if (currentHost.isNotBlank()) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    ),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -162,28 +157,26 @@ internal fun LanModeContent(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (currentHost.isNotBlank()) currentHost else "Không tìm thấy server",
+                                text = currentHost,
                                 style = MaterialTheme.typography.titleSmall.copy(
-                                    fontFamily = if (currentHost.isNotBlank()) FontFamily.Monospace else null,
+                                    fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp
                                 ),
-                                color = if (currentHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (currentHost.isNotBlank()) "Sẵn sàng kết nối qua mạng Wi-Fi LAN" else "Chưa phát hiện máy chủ tự động trong mạng",
+                                text = if (isLanConnected) "Đã kết nối qua mạng Wi-Fi LAN" else "Sẵn sàng kết nối qua mạng Wi-Fi LAN",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                             )
                         }
                     }
                 }
-            }
 
-            if (currentHost.isNotBlank()) {
                 Spacer(modifier = Modifier.height(14.dp))
                 val detectedPort = currentHost.substringAfterLast(":", "").takeIf { it.isNotEmpty() && it.all { c -> c.isDigit() } } ?: "8080"
                 ConnectionSpecsCard(
@@ -197,9 +190,8 @@ internal fun LanModeContent(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Action Row: [Quét lại] + [Nhập IP] + [Kết Nối] hoặc [Ngắt Kết Nối] + [Ghép Đôi]
             if (isLanConnected) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -245,31 +237,35 @@ internal fun LanModeContent(
                         Text("Quét lại", fontSize = 12.sp, maxLines = 1, softWrap = false)
                     }
 
-                    OutlinedButton(
-                        onClick = {
-                            editHostInput = currentHost
-                            isEditingHost = true
-                        },
-                        modifier = Modifier.weight(1f).height(44.dp),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Nhập IP", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                    if (!showInlineSetup) {
+                        OutlinedButton(
+                            onClick = {
+                                editHostInput = currentHost
+                                isEditingHost = true
+                            },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Đổi IP", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                        }
                     }
 
                     Button(
                         onClick = {
                             if (isLanConnecting) {
                                 onDisconnect()
-                            } else if (currentHost.isNotBlank()) {
+                            } else if (effectiveTarget.isNotBlank()) {
+                                currentHost = effectiveTarget
+                                isEditingHost = false
                                 pairingCode = "${(100..999).random()}-${(100..999).random()}"
                                 isPairingRequested = true
                             }
                         },
-                        enabled = currentHost.isNotBlank() || isLanConnecting,
-                        modifier = Modifier.weight(1.15f).height(44.dp),
+                        enabled = effectiveTarget.isNotBlank() || isLanConnecting,
+                        modifier = Modifier.weight(if (showInlineSetup) 1.3f else 1.15f).height(44.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {

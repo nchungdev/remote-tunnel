@@ -41,7 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -61,7 +60,11 @@ internal fun RemoteModeContent(
     onScanQr: () -> Unit,
     onOpenPairing: (() -> Unit)? = null
 ) {
-    var remoteText by remember(initialTarget) { mutableStateOf(initialTarget) }
+    val cleanInitial = remember(initialTarget) {
+        val trimmed = initialTarget.trim()
+        if (trimmed == "default") "" else trimmed
+    }
+    var remoteText by remember(cleanInitial) { mutableStateOf(cleanInitial) }
     var isEditingUrl by remember { mutableStateOf(false) }
     var editUrlInput by remember(remoteText) { mutableStateOf(remoteText) }
     var detectedLanHost by remember { mutableStateOf<String?>(null) }
@@ -71,16 +74,16 @@ internal fun RemoteModeContent(
         (telemetry.channel == RemoteTransportChannel.QuickTunnel || telemetry.channel == RemoteTransportChannel.WebRtcDirect)
     val isRemoteConnecting = telemetry.state == RemoteConnectionState.Connecting &&
         (telemetry.channel == RemoteTransportChannel.QuickTunnel || telemetry.channel == RemoteTransportChannel.WebRtcDirect)
-    val isUsbActive = telemetry.channel == RemoteTransportChannel.UsbCable
+    val showInlineSetup = isEditingUrl || remoteText.isBlank()
+    val effectiveTarget = if (showInlineSetup) editUrlInput.trim() else remoteText.trim()
 
     val dotColor = when {
-        isRemoteConnected -> Color(0xFF10B981) // Green
-        isRemoteConnecting -> Color(0xFFF59E0B) // Yellow/Amber
-        else -> Color(0xFF94A3B8) // Slate Gray (unconnected)
+        isRemoteConnected -> Color(0xFF10B981)
+        isRemoteConnecting -> Color(0xFFF59E0B)
+        else -> Color(0xFF94A3B8)
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Case 2: Handover Banner khi đang chạy Remote mà phát hiện chung Wi-Fi
         if (isRemoteConnected && detectedLanHost != null && !dismissedHandover) {
             LanHandoverBanner(
                 lanHost = detectedLanHost!!,
@@ -93,8 +96,13 @@ internal fun RemoteModeContent(
             Spacer(modifier = Modifier.height(14.dp))
         }
 
-        // 1. Inline Tunnel URL & Prominent QR Scan Button Row
-        if (isEditingUrl) {
+        if (showInlineSetup) {
+            Text(
+                text = "Quét mã QR trên máy tính hoặc dán link máy chủ từ xa:",
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -104,47 +112,34 @@ internal fun RemoteModeContent(
                     onValueChange = { editUrlInput = it },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    placeholder = { Text("Dán link máy chủ từ xa", fontSize = 12.sp) },
+                    placeholder = { Text("Dán URL Cloudflare hoặc mã phòng", fontSize = 12.5.sp) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
-                        remoteText = editUrlInput.trim()
-                        isEditingUrl = false
+                        if (editUrlInput.isNotBlank()) {
+                            remoteText = editUrlInput.trim()
+                            isEditingUrl = false
+                            onConnect(remoteText)
+                        }
                     }),
                     shape = RoundedCornerShape(10.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
-                IconButton(
-                    onClick = {
-                        remoteText = editUrlInput.trim()
-                        isEditingUrl = false
-                    },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = "Lưu", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp))
-                }
-                IconButton(
-                    onClick = {
-                        editUrlInput = remoteText
-                        isEditingUrl = false
-                    },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = "Hủy", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                if (remoteText.isNotBlank()) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(
+                        onClick = { if (editUrlInput.isNotBlank()) { remoteText = editUrlInput.trim(); isEditingUrl = false } },
+                        modifier = Modifier.size(36.dp)
+                    ) { Icon(Icons.Default.Check, contentDescription = "Lưu", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp)) }
+                    IconButton(
+                        onClick = { editUrlInput = remoteText; isEditingUrl = false },
+                        modifier = Modifier.size(36.dp)
+                    ) { Icon(Icons.Default.Close, contentDescription = "Hủy", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
                 }
             }
         } else {
             Surface(
                 shape = RoundedCornerShape(14.dp),
-                color = if (remoteText.isNotBlank()) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                },
-                border = BorderStroke(
-                    1.dp,
-                    if (remoteText.isNotBlank()) MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                ),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -160,22 +155,20 @@ internal fun RemoteModeContent(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        val displayStatus = when {
-                            remoteText.isBlank() -> "Chưa có đường truyền từ xa"
-                            remoteText.contains("trycloudflare.com") -> {
-                                val hostShort = remoteText.removePrefix("https://").removePrefix("http://").substringBefore(".trycloudflare.com").take(18)
-                                "$hostShort..."
-                            }
-                            else -> remoteText.removePrefix("https://").removePrefix("http://")
+                        val displayStatus = if (remoteText.contains("trycloudflare.com")) {
+                            val hostShort = remoteText.removePrefix("https://").removePrefix("http://").substringBefore(".trycloudflare.com").take(18)
+                            "$hostShort..."
+                        } else {
+                            remoteText.removePrefix("https://").removePrefix("http://")
                         }
                         Text(
                             text = displayStatus,
                             style = MaterialTheme.typography.titleSmall.copy(
-                                fontFamily = if (remoteText.isNotBlank()) FontFamily.Monospace else null,
+                                fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp
                             ),
-                            color = if (remoteText.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -183,8 +176,7 @@ internal fun RemoteModeContent(
                         val subtitle = when {
                             isRemoteConnected -> "Đã kết nối thông suốt với máy tính"
                             isRemoteConnecting -> "Đang thiết lập kênh truyền bảo mật..."
-                            remoteText.isNotBlank() -> "Đã sẵn sàng đường truyền P2P / Cloudflare"
-                            else -> "Quét mã QR trên máy tính hoặc nhập URL"
+                            else -> "Đã sẵn sàng đường truyền P2P / Cloudflare"
                         }
                         Text(
                             text = subtitle,
@@ -196,19 +188,18 @@ internal fun RemoteModeContent(
             }
         }
 
-        // 3. Recent Tunnels (thay thế khung info specs khi chưa kết nối)
         RecentTunnelsSection(
             recentTunnels = recentTunnels,
-            selectedUrl = remoteText,
+            selectedUrl = effectiveTarget,
             onSelectTunnel = {
                 remoteText = it
                 editUrlInput = it
+                isEditingUrl = false
             }
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // 4. Action Row: [Quét QR] + [Nhập URL] + [Kết Nối] hoặc [Ngắt Kết Nối] + [Ghép Đôi]
         if (isRemoteConnected) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -254,27 +245,34 @@ internal fun RemoteModeContent(
                     Text("Quét QR", fontSize = 12.sp, maxLines = 1, softWrap = false)
                 }
 
-                OutlinedButton(
-                    onClick = {
-                        editUrlInput = remoteText
-                        isEditingUrl = true
-                    },
-                    modifier = Modifier.weight(1f).height(44.dp),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Nhập URL", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                if (!showInlineSetup) {
+                    OutlinedButton(
+                        onClick = {
+                            editUrlInput = remoteText
+                            isEditingUrl = true
+                        },
+                        modifier = Modifier.weight(1f).height(44.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Đổi URL", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                    }
                 }
 
                 Button(
                     onClick = {
-                        if (isRemoteConnecting) onDisconnect()
-                        else if (remoteText.isNotBlank()) onConnect(remoteText.trim())
+                        if (isRemoteConnecting) {
+                            onDisconnect()
+                        } else if (effectiveTarget.isNotBlank()) {
+                            remoteText = effectiveTarget
+                            isEditingUrl = false
+                            onConnect(effectiveTarget)
+                        }
                     },
-                    enabled = remoteText.isNotBlank() || isRemoteConnecting,
-                    modifier = Modifier.weight(1.15f).height(44.dp),
+                    enabled = effectiveTarget.isNotBlank() || isRemoteConnecting,
+                    modifier = Modifier.weight(if (showInlineSetup) 1.3f else 1.15f).height(44.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
