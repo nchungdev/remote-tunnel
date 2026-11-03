@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -35,6 +36,15 @@ type QuickTunnel struct {
 	lastError      string
 	onURLFound     func(url string)
 	onStateChanged func(active bool, url string)
+	starting       *startAttempt
+	resolves       func(ctx context.Context, host string) bool
+}
+
+// startAttempt lets concurrent Start calls share one cloudflared process.
+type startAttempt struct {
+	done chan struct{}
+	url  string
+	err  error
 }
 
 // Option configures QuickTunnel options.
@@ -58,7 +68,8 @@ func WithStateCallback(cb func(active bool, url string)) Option {
 // Note: It does NOT start automatically; call Start() explicitly when needed.
 func New(port int, opts ...Option) *QuickTunnel {
 	t := &QuickTunnel{
-		port: port,
+		port:     port,
+		resolves: hostnameResolves,
 	}
 	for _, opt := range opts {
 		opt(t)
@@ -66,7 +77,8 @@ func New(port int, opts ...Option) *QuickTunnel {
 	return t
 }
 
-// Start launches cloudflared tunnel on-demand and returns the trycloudflare.com URL.
+// Start launches cloudflared tunnel on-demand and returns the trycloudflare.com URL
+// once clients can use it: the tunnel is registered and its hostname resolves.
 func (t *QuickTunnel) Start(parentCtx context.Context) (string, error) {
 	t.mu.Lock()
 	if t.cmd != nil && t.url != "" {
@@ -74,8 +86,26 @@ func (t *QuickTunnel) Start(parentCtx context.Context) (string, error) {
 		t.mu.Unlock()
 		return curURL, nil
 	}
+	if pending := t.starting; pending != nil {
+		t.mu.Unlock()
+		<-pending.done
+		return pending.url, pending.err
+	}
+	attempt := &startAttempt{done: make(chan struct{})}
+	t.starting = attempt
 	t.lastError = ""
 	t.mu.Unlock()
+
+	attempt.url, attempt.err = t.launch()
+
+	t.mu.Lock()
+	t.starting = nil
+	t.mu.Unlock()
+	close(attempt.done)
+	return attempt.url, attempt.err
+}
+
+func (t *QuickTunnel) launch() (string, error) {
 
 	binPath, err := exec.LookPath("cloudflared")
 	if err != nil {
@@ -116,32 +146,26 @@ func (t *QuickTunnel) Start(parentCtx context.Context) (string, error) {
 	urlCh := make(chan string, 1)
 
 	go func() {
+		var candidate string
+		published := false
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if match := cloudflareURLRegex.FindString(line); match != "" {
-				t.mu.Lock()
-				t.url = match
-				t.mu.Unlock()
-
-				t.saveTunnelURL(match)
-				if t.onURLFound != nil {
-					t.onURLFound(match)
-				}
-				if t.onStateChanged != nil {
-					t.onStateChanged(true, match)
-				}
-
-				select {
-				case urlCh <- match:
-				default:
-				}
-				log.Printf("[QuickTunnel] Đường hầm đã kích hoạt: %s", match)
+				candidate = match
+			}
+			if candidate != "" && !published && strings.Contains(line, "Registered tunnel connection") {
+				published = true
+				go t.publish(ctx, candidate, urlCh)
 			}
 		}
 
 		_ = cmd.Wait()
 		t.mu.Lock()
+		if t.cmd != cmd {
+			t.mu.Unlock() // Stopped and possibly restarted: this state is no longer ours.
+			return
+		}
 		t.url = ""
 		t.cmd = nil
 		t.cancel = nil
@@ -165,6 +189,29 @@ func (t *QuickTunnel) Start(parentCtx context.Context) (string, error) {
 		t.Stop()
 		return "", ctx.Err()
 	}
+}
+
+// publish exposes the URL only when usable. Handing it out earlier makes clients
+// cache NXDOMAIN for the new hostname and stay unable to connect long after it is live.
+func (t *QuickTunnel) publish(ctx context.Context, url string, urlCh chan<- string) {
+	waitForDNS(ctx, url, t.resolves)
+	if ctx.Err() != nil {
+		return
+	}
+
+	t.mu.Lock()
+	t.url = url
+	t.mu.Unlock()
+
+	t.saveTunnelURL(url)
+	if t.onURLFound != nil {
+		t.onURLFound(url)
+	}
+	if t.onStateChanged != nil {
+		t.onStateChanged(true, url)
+	}
+	urlCh <- url
+	log.Printf("[QuickTunnel] Đường hầm đã kích hoạt: %s", url)
 }
 
 // Stop terminates the running cloudflared process.
