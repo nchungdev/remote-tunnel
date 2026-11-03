@@ -50,6 +50,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+internal const val DEFAULT_REMOTE_PLACEHOLDER = "Dán URL Cloudflare hoặc mã phòng"
+
 @Composable
 internal fun RemoteModeContent(
     initialTarget: String,
@@ -58,7 +60,8 @@ internal fun RemoteModeContent(
     onConnect: (String) -> Unit,
     onDisconnect: () -> Unit,
     onScanQr: () -> Unit,
-    onOpenPairing: (() -> Unit)? = null
+    onOpenPairing: (() -> Unit)? = null,
+    remotePlaceholder: String = DEFAULT_REMOTE_PLACEHOLDER
 ) {
     val cleanInitial = remember(initialTarget) {
         val trimmed = initialTarget.trim()
@@ -112,7 +115,7 @@ internal fun RemoteModeContent(
                     onValueChange = { editUrlInput = it },
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    placeholder = { Text("Dán URL Cloudflare hoặc mã phòng", fontSize = 12.5.sp) },
+                    placeholder = { Text(remotePlaceholder, fontSize = 12.5.sp) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = {
                         if (editUrlInput.isNotBlank()) {

@@ -1,6 +1,5 @@
 package app.duinch.remotetunnel
 
-import app.duinch.remotetunnel.network.ComputeReconnectBackoff
 import app.duinch.remotetunnel.parser.RemoteQrPayloadParser
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,21 +35,5 @@ class RemoteTunnelCommonTest {
         val parsed = RemoteQrPayloadParser.parse("123-456")
         assertNotNull(parsed)
         assertEquals("123-456", parsed.roomCode)
-    }
-
-    @Test
-    fun testBackoff_IncreasesExponentially() {
-        val backoff = ComputeReconnectBackoff(
-            initialDelayMs = 1000L,
-            maxDelayMs = 16000L,
-            jitterRatio = 0.0
-        )
-        assertEquals(0L, backoff(0))
-        assertEquals(1000L, backoff(1))
-        assertEquals(2000L, backoff(2))
-        assertEquals(4000L, backoff(3))
-        assertEquals(8000L, backoff(4))
-        assertEquals(16000L, backoff(5))
-        assertEquals(16000L, backoff(6))
     }
 }

@@ -62,7 +62,8 @@ internal fun LanModeContent(
 ) {
     var currentHost by remember(initialAddress) {
         val clean = initialAddress.trim()
-        val effective = if (clean.contains("trycloudflare.com") || clean.contains("://")) "" else clean
+        // Saved addresses are normalized to http://host:port; this field shows host:port.
+        val effective = if (clean.contains("trycloudflare.com")) "" else clean.substringAfter("://").trimEnd('/')
         mutableStateOf(effective)
     }
     var isEditingHost by remember { mutableStateOf(false) }

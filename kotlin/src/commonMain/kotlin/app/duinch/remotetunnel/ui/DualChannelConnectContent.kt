@@ -78,6 +78,7 @@ fun DualChannelConnectContent(
     serverRemoteUrl: String = "",
     isServerRemoteActive: Boolean = false,
     recentTunnels: List<String> = emptyList(),
+    remotePlaceholder: String = DEFAULT_REMOTE_PLACEHOLDER,
     title: String = "Kết Nối Máy Chủ",
     dedicatedMode: ConnectMode? = null,
     adbStatusContent: (@Composable () -> Unit)? = null,
@@ -206,7 +207,8 @@ fun DualChannelConnectContent(
                     onConnect = { onConnect("", it) },
                     onDisconnect = onDisconnect,
                     onScanQr = onScanQr,
-                    onOpenPairing = onOpenPairing
+                    onOpenPairing = onOpenPairing,
+                    remotePlaceholder = remotePlaceholder
                 )
             }
         }
