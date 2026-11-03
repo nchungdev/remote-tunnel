@@ -72,8 +72,7 @@ internal fun LanModeContent(
 
     val isLanConnected = telemetry.state == RemoteConnectionState.Connected && telemetry.channel == RemoteTransportChannel.LanWifi
     val isLanConnecting = telemetry.state == RemoteConnectionState.Connecting && telemetry.channel == RemoteTransportChannel.LanWifi
-    val showInlineSetup = isEditingHost || currentHost.isBlank()
-    val effectiveTarget = if (showInlineSetup) editHostInput.trim() else currentHost.trim()
+    val effectiveTarget = if (isEditingHost) editHostInput.trim() else currentHost.trim()
 
     LaunchedEffect(Unit) {
         if (currentHost.isBlank()) {
@@ -98,7 +97,7 @@ internal fun LanModeContent(
                 onCancel = { isPairingRequested = false }
             )
         } else {
-            if (showInlineSetup) {
+            if (isEditingHost) {
                 Text(
                     text = "Nhập địa chỉ IP máy chủ hoặc bấm Quét lại để tự tìm:",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
@@ -124,17 +123,20 @@ internal fun LanModeContent(
                         }),
                         shape = RoundedCornerShape(10.dp)
                     )
-                    if (currentHost.isNotBlank()) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        IconButton(
-                            onClick = { if (editHostInput.isNotBlank()) { currentHost = editHostInput.trim(); isEditingHost = false } },
-                            modifier = Modifier.size(36.dp)
-                        ) { Icon(Icons.Default.Check, contentDescription = "Lưu", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp)) }
-                        IconButton(
-                            onClick = { editHostInput = currentHost; isEditingHost = false },
-                            modifier = Modifier.size(36.dp)
-                        ) { Icon(Icons.Default.Close, contentDescription = "Hủy", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
-                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    IconButton(
+                        onClick = {
+                            if (editHostInput.isNotBlank()) {
+                                currentHost = editHostInput.trim()
+                                isEditingHost = false
+                            }
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) { Icon(Icons.Default.Check, contentDescription = "Lưu", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp)) }
+                    IconButton(
+                        onClick = { editHostInput = currentHost; isEditingHost = false },
+                        modifier = Modifier.size(36.dp)
+                    ) { Icon(Icons.Default.Close, contentDescription = "Hủy", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
                 }
             } else {
                 Surface(
@@ -157,21 +159,39 @@ internal fun LanModeContent(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = currentHost,
+                                text = currentHost.ifBlank { "Chưa thiết lập IP máy chủ" },
                                 style = MaterialTheme.typography.titleSmall.copy(
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 14.sp
                                 ),
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = if (currentHost.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (isLanConnected) "Đã kết nối qua mạng Wi-Fi LAN" else "Sẵn sàng kết nối qua mạng Wi-Fi LAN",
+                                text = when {
+                                    isLanConnected -> "Đã kết nối qua mạng Wi-Fi LAN"
+                                    currentHost.isNotBlank() -> "Sẵn sàng kết nối qua mạng Wi-Fi LAN"
+                                    else -> "Bấm biểu tượng sửa bên phải để nhập IP hoặc bấm Quét lại"
+                                },
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                editHostInput = currentHost
+                                isEditingHost = true
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Chỉnh sửa IP",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -182,7 +202,7 @@ internal fun LanModeContent(
                 ConnectionSpecsCard(
                     items = listOf(
                         "Giao thức" to "WebSocket / HTTP",
-                        "Địa chỉ máy chủ" to currentHost,
+                        "Địa chỉ máy chủ" to (currentHost.ifBlank { "Chưa cấu hình" }),
                         "Trạng thái Server" to if (isLanConnected) "Đang kết nối (Port $detectedPort)" else "Sẵn sàng (Port $detectedPort)",
                         "Độ trễ mạng" to "< 2 ms (LAN)",
                         "Xác thực" to "Mã PIN 6 số xác thực"
@@ -237,22 +257,6 @@ internal fun LanModeContent(
                         Text("Quét lại", fontSize = 12.sp, maxLines = 1, softWrap = false)
                     }
 
-                    if (!showInlineSetup) {
-                        OutlinedButton(
-                            onClick = {
-                                editHostInput = currentHost
-                                isEditingHost = true
-                            },
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Đổi IP", fontSize = 12.sp, maxLines = 1, softWrap = false)
-                        }
-                    }
-
                     Button(
                         onClick = {
                             if (isLanConnecting) {
@@ -265,7 +269,7 @@ internal fun LanModeContent(
                             }
                         },
                         enabled = effectiveTarget.isNotBlank() || isLanConnecting,
-                        modifier = Modifier.weight(if (showInlineSetup) 1.3f else 1.15f).height(44.dp),
+                        modifier = Modifier.weight(1.2f).height(44.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
