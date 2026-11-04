@@ -81,12 +81,17 @@ internal fun ServerCardHeader(
     onEdit: (() -> Unit)? = null
 ) {
     val stateText = when {
+        chrome.statusNote == "Không có sẵn" -> "Không có sẵn"
         state == RemoteConnectionState.Connecting -> "Đang kết nối..."
         state != RemoteConnectionState.Connected -> "Chưa kết nối"
         chrome.tone == ServerCardTone.Standby -> "Dự phòng"
         else -> "Đang dùng"
     }
-    val statusLine = hint ?: listOfNotNull(channelLabel, stateText, chrome.statusNote).joinToString(" • ")
+    val statusLine = hint ?: listOfNotNull(
+        channelLabel,
+        stateText,
+        chrome.statusNote.takeIf { it != "Không có sẵn" && state == RemoteConnectionState.Connected }
+    ).joinToString(" • ")
 
     ServerCardHeaderRow(
         title = chrome.displayName ?: address.ifBlank { chrome.title },
