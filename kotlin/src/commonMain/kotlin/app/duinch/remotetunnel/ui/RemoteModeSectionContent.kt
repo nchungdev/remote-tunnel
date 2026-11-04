@@ -63,6 +63,7 @@ internal fun RemoteModeContent(
     onScanQr: () -> Unit,
     onOpenPairing: (() -> Unit)? = null,
     remotePlaceholder: String = DEFAULT_REMOTE_PLACEHOLDER,
+    onDeleteRecentTunnel: ((String) -> Unit)? = null,
     chrome: ServerCardChrome
 ) {
     val cleanInitial = remember(initialTarget) {
@@ -188,35 +189,37 @@ internal fun RemoteModeContent(
                     remoteText = it
                     editUrlInput = it
                     isEditingUrl = false
-                }
+                },
+                onDeleteTunnel = onDeleteRecentTunnel
             )
-
 
             if (isRemoteConnected) {
                 if (onOpenPairing != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
                     OutlinedButton(
                         onClick = onOpenPairing,
-                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Ghép đôi", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
                     }
                 }
             } else {
+                Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
                         onClick = onScanQr,
-                        modifier = Modifier.weight(1f).height(44.dp),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Quét QR", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Quét QR", fontSize = 13.sp, maxLines = 1)
                     }
 
                     if (!showInlineSetup) {
@@ -225,38 +228,41 @@ internal fun RemoteModeContent(
                                 editUrlInput = remoteText
                                 isEditingUrl = true
                             },
-                            modifier = Modifier.weight(1f).height(44.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Đổi URL", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Đổi URL", fontSize = 13.sp, maxLines = 1)
                         }
                     }
+                }
 
-                    Button(
-                        onClick = {
-                            if (isRemoteConnecting) {
-                                onDisconnect()
-                            } else if (effectiveTarget.isNotBlank()) {
-                                remoteText = effectiveTarget
-                                isEditingUrl = false
-                                onConnect(effectiveTarget)
-                            }
-                        },
-                        enabled = effectiveTarget.isNotBlank() || isRemoteConnecting,
-                        modifier = Modifier.weight(if (showInlineSetup) 1.3f else 1.15f).height(44.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Button(
+                    onClick = {
                         if (isRemoteConnecting) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                        } else {
-                            Icon(Icons.Default.FlashOn, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Kết Nối", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, softWrap = false)
+                            onDisconnect()
+                        } else if (effectiveTarget.isNotBlank()) {
+                            remoteText = effectiveTarget
+                            isEditingUrl = false
+                            onConnect(effectiveTarget)
                         }
+                    },
+                    enabled = effectiveTarget.isNotBlank() || isRemoteConnecting,
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (isRemoteConnecting) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Đang kết nối...", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    } else {
+                        Icon(Icons.Default.FlashOn, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Kết Nối Máy Chủ", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 }
             }

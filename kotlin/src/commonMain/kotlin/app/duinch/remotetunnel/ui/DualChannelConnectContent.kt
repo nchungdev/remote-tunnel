@@ -84,6 +84,7 @@ fun DualChannelConnectContent(
     serverRemoteUrl: String = "",
     isServerRemoteActive: Boolean = false,
     recentTunnels: List<String> = emptyList(),
+    onDeleteRecentTunnel: ((String) -> Unit)? = null,
     remotePlaceholder: String = DEFAULT_REMOTE_PLACEHOLDER,
     title: String = "Kết Nối Máy Chủ",
     dedicatedMode: ConnectMode? = null,
@@ -166,6 +167,7 @@ fun DualChannelConnectContent(
                         onScanQr = onScanQr,
                         onOpenPairing = onOpenPairing,
                         remotePlaceholder = remotePlaceholder,
+                        onDeleteRecentTunnel = onDeleteRecentTunnel,
                         chrome = chrome
                     )
                 }

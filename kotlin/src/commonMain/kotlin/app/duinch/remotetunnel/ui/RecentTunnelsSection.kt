@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,7 +35,8 @@ import androidx.compose.ui.unit.sp
 internal fun RecentTunnelsSection(
     recentTunnels: List<String>,
     selectedUrl: String,
-    onSelectTunnel: (String) -> Unit
+    onSelectTunnel: (String) -> Unit,
+    onDeleteTunnel: ((String) -> Unit)? = null
 ) {
     if (recentTunnels.isEmpty()) return
 
@@ -74,7 +77,7 @@ internal fun RecentTunnelsSection(
                     .clickable { onSelectTunnel(tunnelUrl) }
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -93,14 +96,30 @@ internal fun RecentTunnelsSection(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    if (isSelected) {
-                        Text(
-                            text = "Đang chọn",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isSelected) {
+                            Text(
+                                text = "Đang chọn",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
                             )
-                        )
+                        }
+                        if (onDeleteTunnel != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(
+                                onClick = { onDeleteTunnel(tunnelUrl) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Xóa",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

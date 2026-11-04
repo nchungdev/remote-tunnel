@@ -86,10 +86,20 @@ internal fun ServerCardHeader(
         chrome.tone == ServerCardTone.Standby -> "Dự phòng"
         else -> "Đang dùng"
     }
-    val statusLine = hint ?: listOfNotNull(channelLabel, stateText, chrome.statusNote).joinToString(" • ")
+    val resolvedTitle = when {
+        !chrome.displayName.isNullOrBlank() -> chrome.displayName
+        address.contains("trycloudflare.com") -> "Máy Chủ Cloudflare Tunnel"
+        address.isNotBlank() && (address.startsWith("http://") || address.startsWith("https://")) -> "Máy Chủ Remote"
+        address.isNotBlank() && address.contains(":") -> "Máy Chủ LAN"
+        else -> chrome.title
+    }
+    val hostSnippet = if (address.contains("trycloudflare.com")) {
+        address.removePrefix("https://").removePrefix("http://").substringBefore(".trycloudflare.com").take(16) + "..."
+    } else null
+    val statusLine = hint ?: listOfNotNull(channelLabel, hostSnippet, stateText, chrome.statusNote).joinToString(" • ")
 
     ServerCardHeaderRow(
-        title = chrome.displayName ?: address.ifBlank { chrome.title },
+        title = resolvedTitle,
         statusLine = statusLine,
         tone = chrome.tone,
         expanded = chrome.expanded,
