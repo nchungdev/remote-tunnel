@@ -1,5 +1,6 @@
 package app.duinch.remotetunnel.ui
 
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -61,17 +62,19 @@ internal fun RemoteModeContent(
     onDisconnect: () -> Unit,
     onScanQr: () -> Unit,
     onOpenPairing: (() -> Unit)? = null,
-    remotePlaceholder: String = DEFAULT_REMOTE_PLACEHOLDER
+    remotePlaceholder: String = DEFAULT_REMOTE_PLACEHOLDER,
+    chrome: ServerCardChrome
 ) {
     val cleanInitial = remember(initialTarget) {
         val trimmed = initialTarget.trim()
         if (trimmed == "default") "" else trimmed
     }
-    var remoteText by remember(cleanInitial) { mutableStateOf(cleanInitial) }
-    var isEditingUrl by remember { mutableStateOf(false) }
-    var editUrlInput by remember(remoteText) { mutableStateOf(remoteText) }
-    var detectedLanHost by remember { mutableStateOf<String?>(null) }
-    var dismissedHandover by remember { mutableStateOf(false) }
+    var remoteText by rememberSaveable(cleanInitial) { mutableStateOf(cleanInitial) }
+    var isEditingUrl by rememberSaveable { mutableStateOf(false) }
+    var showDetails by rememberSaveable { mutableStateOf(false) }
+    var editUrlInput by rememberSaveable(remoteText) { mutableStateOf(remoteText) }
+    var detectedLanHost by rememberSaveable { mutableStateOf<String?>(null) }
+    var dismissedHandover by rememberSaveable { mutableStateOf(false) }
 
     val isRemoteConnected = telemetry.state == RemoteConnectionState.Connected &&
         (telemetry.channel == RemoteTransportChannel.QuickTunnel || telemetry.channel == RemoteTransportChannel.WebRtcDirect)
@@ -80,211 +83,180 @@ internal fun RemoteModeContent(
     val showInlineSetup = isEditingUrl || remoteText.isBlank()
     val effectiveTarget = if (showInlineSetup) editUrlInput.trim() else remoteText.trim()
 
-    val dotColor = when {
-        isRemoteConnected -> Color(0xFF10B981)
-        isRemoteConnecting -> Color(0xFFF59E0B)
-        else -> Color(0xFF94A3B8)
+    if (showDetails) {
+        ConnectionDetailsDialog(
+            items = listOf(
+                "Địa chỉ máy chủ" to remoteText,
+                "Trạng thái" to when {
+                    isRemoteConnected -> "Đã kết nối"
+                    isRemoteConnecting -> "Đang kết nối"
+                    else -> "Chưa kết nối"
+                },
+                "Độ trễ mạng" to (telemetry.pingMs?.takeIf { isRemoteConnected }?.let { "$it ms" } ?: "--")
+            ) + chrome.detailItems,
+            onDismiss = { showDetails = false },
+            onDisconnect = chrome.onDisconnect.takeIf { isRemoteConnected || isRemoteConnecting },
+            onConnect = { onConnect(remoteText) }.takeIf { !isRemoteConnected && !isRemoteConnecting && remoteText.isNotBlank() },
+            onDelete = chrome.onClose,
+            footer = chrome.detailsFooter
+        )
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (isRemoteConnected && detectedLanHost != null && !dismissedHandover) {
-            LanHandoverBanner(
-                lanHost = detectedLanHost!!,
-                onSwitch = {
-                    onDisconnect()
-                    onConnect(detectedLanHost!!)
-                },
-                onDismiss = { dismissedHandover = true }
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-        }
+        ServerCardHeader(
+            chrome = chrome,
+            address = if (showInlineSetup) "" else remoteText.substringAfter("://").trimEnd('/'),
+            channelLabel = "Từ xa",
+            state = telemetry.state,
+            onShowDetails = { showDetails = true }.takeIf { !showInlineSetup },
+            onEdit = {
+                editUrlInput = remoteText
+                isEditingUrl = true
+            }.takeIf { !showInlineSetup }
+        )
+        if (!chrome.expanded && !isEditingUrl) return@Column
 
-        if (showInlineSetup) {
-            Text(
-                text = "Quét mã QR trên máy tính hoặc dán link máy chủ từ xa:",
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = editUrlInput,
-                    onValueChange = { editUrlInput = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    placeholder = { Text(remotePlaceholder, fontSize = 12.5.sp) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        if (editUrlInput.isNotBlank()) {
-                            remoteText = editUrlInput.trim()
-                            isEditingUrl = false
-                            onConnect(remoteText)
-                        }
-                    }),
-                    shape = RoundedCornerShape(10.dp)
-                )
-                if (remoteText.isNotBlank()) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    IconButton(
-                        onClick = { if (editUrlInput.isNotBlank()) { remoteText = editUrlInput.trim(); isEditingUrl = false } },
-                        modifier = Modifier.size(36.dp)
-                    ) { Icon(Icons.Default.Check, contentDescription = "Lưu", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp)) }
-                    IconButton(
-                        onClick = { editUrlInput = remoteText; isEditingUrl = false },
-                        modifier = Modifier.size(36.dp)
-                    ) { Icon(Icons.Default.Close, contentDescription = "Hủy", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
-                }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface, ServerCardBodyShape)
+                .padding(ServerCardBodyPadding)
+        ) {
+            chrome.belowHeader?.invoke()
+            if (!isRemoteConnected || isEditingUrl || onOpenPairing != null) {
+                Spacer(modifier = Modifier.height(12.dp))
             }
-        } else {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+
+            if (isRemoteConnected && detectedLanHost != null && !dismissedHandover) {
+                LanHandoverBanner(
+                    lanHost = detectedLanHost!!,
+                    onSwitch = {
+                        onDisconnect()
+                        onConnect(detectedLanHost!!)
+                    },
+                    onDismiss = { dismissedHandover = true }
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+            }
+
+            if (showInlineSetup) {
+                Text(
+                    text = "Quét QR hoặc dán link máy chủ:",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(9.dp)
-                            .background(dotColor, CircleShape)
+                    OutlinedTextField(
+                        value = editUrlInput,
+                        onValueChange = { editUrlInput = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text(remotePlaceholder, fontSize = 12.5.sp) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            if (editUrlInput.isNotBlank()) {
+                                remoteText = editUrlInput.trim()
+                                isEditingUrl = false
+                                onConnect(remoteText)
+                            }
+                        }),
+                        shape = RoundedCornerShape(10.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        val displayStatus = if (remoteText.contains("trycloudflare.com")) {
-                            val hostShort = remoteText.removePrefix("https://").removePrefix("http://").substringBefore(".trycloudflare.com").take(18)
-                            "$hostShort..."
-                        } else {
-                            remoteText.removePrefix("https://").removePrefix("http://")
-                        }
-                        Text(
-                            text = displayStatus,
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        val subtitle = when {
-                            isRemoteConnected -> "Đã kết nối thông suốt với máy tính"
-                            isRemoteConnecting -> "Đang thiết lập kênh truyền bảo mật..."
-                            else -> "Đã sẵn sàng đường truyền P2P / Cloudflare"
-                        }
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
-                        )
+                    if (remoteText.isNotBlank()) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        IconButton(
+                            onClick = { if (editUrlInput.isNotBlank()) { remoteText = editUrlInput.trim(); isEditingUrl = false } },
+                            modifier = Modifier.size(36.dp)
+                        ) { Icon(Icons.Default.Check, contentDescription = "Lưu", tint = Color(0xFF10B981), modifier = Modifier.size(20.dp)) }
+                        IconButton(
+                            onClick = { editUrlInput = remoteText; isEditingUrl = false },
+                            modifier = Modifier.size(36.dp)
+                        ) { Icon(Icons.Default.Close, contentDescription = "Hủy", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp)) }
                     }
                 }
+                Spacer(modifier = Modifier.height(12.dp))
             }
-        }
 
-        RecentTunnelsSection(
-            recentTunnels = recentTunnels,
-            selectedUrl = effectiveTarget,
-            onSelectTunnel = {
-                remoteText = it
-                editUrlInput = it
-                isEditingUrl = false
-            }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (isRemoteConnected) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val disconnectMod = if (onOpenPairing != null) Modifier.weight(1.3f) else Modifier.fillMaxWidth()
-                Button(
-                    onClick = onDisconnect,
-                    modifier = disconnectMod.height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444))
-                ) {
-                    Icon(Icons.Default.PowerSettingsNew, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (onOpenPairing != null) "Ngắt Kết Nối" else "Ngắt Kết Nối Từ Xa", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+            RecentTunnelsSection(
+                recentTunnels = recentTunnels,
+                selectedUrl = effectiveTarget,
+                onSelectTunnel = {
+                    remoteText = it
+                    editUrlInput = it
+                    isEditingUrl = false
                 }
+            )
 
+
+            if (isRemoteConnected) {
                 if (onOpenPairing != null) {
                     OutlinedButton(
                         onClick = onOpenPairing,
-                        modifier = Modifier.weight(1f).height(48.dp),
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Ghép đôi", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1)
                     }
                 }
-            }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onScanQr,
-                    modifier = Modifier.weight(1f).height(44.dp),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                    shape = RoundedCornerShape(12.dp)
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(15.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Quét QR", fontSize = 12.sp, maxLines = 1, softWrap = false)
-                }
-
-                if (!showInlineSetup) {
                     OutlinedButton(
-                        onClick = {
-                            editUrlInput = remoteText
-                            isEditingUrl = true
-                        },
+                        onClick = onScanQr,
                         modifier = Modifier.weight(1f).height(44.dp),
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Đổi URL", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                        Text("Quét QR", fontSize = 12.sp, maxLines = 1, softWrap = false)
                     }
-                }
 
-                Button(
-                    onClick = {
-                        if (isRemoteConnecting) {
-                            onDisconnect()
-                        } else if (effectiveTarget.isNotBlank()) {
-                            remoteText = effectiveTarget
-                            isEditingUrl = false
-                            onConnect(effectiveTarget)
+                    if (!showInlineSetup) {
+                        OutlinedButton(
+                            onClick = {
+                                editUrlInput = remoteText
+                                isEditingUrl = true
+                            },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Đổi URL", fontSize = 12.sp, maxLines = 1, softWrap = false)
                         }
-                    },
-                    enabled = effectiveTarget.isNotBlank() || isRemoteConnecting,
-                    modifier = Modifier.weight(if (showInlineSetup) 1.3f else 1.15f).height(44.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    if (isRemoteConnecting) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        Icon(Icons.Default.FlashOn, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Kết Nối", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, softWrap = false)
+                    }
+
+                    Button(
+                        onClick = {
+                            if (isRemoteConnecting) {
+                                onDisconnect()
+                            } else if (effectiveTarget.isNotBlank()) {
+                                remoteText = effectiveTarget
+                                isEditingUrl = false
+                                onConnect(effectiveTarget)
+                            }
+                        },
+                        enabled = effectiveTarget.isNotBlank() || isRemoteConnecting,
+                        modifier = Modifier.weight(if (showInlineSetup) 1.3f else 1.15f).height(44.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (isRemoteConnecting) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                        } else {
+                            Icon(Icons.Default.FlashOn, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Kết Nối", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, maxLines = 1, softWrap = false)
+                        }
                     }
                 }
             }

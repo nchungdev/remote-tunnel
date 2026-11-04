@@ -1,5 +1,11 @@
 package app.duinch.remotetunnel.ui
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.fadeIn
@@ -83,8 +89,17 @@ fun DualChannelConnectContent(
     dedicatedMode: ConnectMode? = null,
     adbStatusContent: (@Composable () -> Unit)? = null,
     onClose: (() -> Unit)? = null,
+    displayName: String? = null,
+    onRename: (() -> Unit)? = null,
+    statusNote: String? = null,
+    tone: ServerCardTone? = null,
+    detailItems: List<Pair<String, String>> = emptyList(),
+    detailsFooter: (@Composable () -> Unit)? = null,
+    expanded: Boolean = true,
+    onToggleExpanded: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val formStates = rememberSaveableStateHolder()
     val activeMode = remember(dedicatedMode, initialRemoteTarget, initialLanAddress, isWifiConnected, telemetry.channel) {
         when {
             dedicatedMode != null -> dedicatedMode
@@ -96,93 +111,32 @@ fun DualChannelConnectContent(
         }
     }
 
+    val cardTone = tone ?: telemetry.state.defaultTone()
+    val palette = serverCardPalette(cardTone)
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        color = palette.card,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, palette.border)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(18.dp)
-        ) {
-            // Header with Close
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    val isLan = activeMode == ConnectMode.Lan
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (isLan) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
-                    ) {
-                        Text(
-                            text = if (isLan) "Wi-Fi" else "Từ Xa",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 10.5.sp
-                            ),
-                            color = if (isLan) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val (badgeText, badgeBg, badgeFg) = when (telemetry.state) {
-                        RemoteConnectionState.Connected -> Triple("ĐÃ KẾT NỐI", Color(0xFFE8F5E9), Color(0xFF2E7D32))
-                        RemoteConnectionState.Connecting -> Triple("ĐANG KẾT NỐI...", MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
-                        else -> Triple("CHƯA KẾT NỐI", MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = badgeBg
-                    ) {
-                        Text(
-                            text = badgeText,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp
-                            ),
-                            color = badgeFg
-                        )
-                    }
-                    if (onClose != null) {
-                        IconButton(onClick = onClose, modifier = Modifier.size(26.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Đóng",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (adbStatusContent != null) {
-                Spacer(modifier = Modifier.height(14.dp))
-                adbStatusContent()
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
+        CompositionLocalProvider(LocalServerCardPalette provides palette) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            val chrome = ServerCardChrome(
+                title = title,
+                displayName = displayName,
+                onRename = onRename,
+                statusNote = statusNote,
+                tone = cardTone,
+                expanded = expanded,
+                onToggleExpanded = onToggleExpanded,
+                onClose = onClose,
+                onDisconnect = onDisconnect,
+                belowHeader = adbStatusContent,
+                detailItems = detailItems,
+                detailsFooter = detailsFooter
+            )
 
             // Content per mode
             val effectiveRemoteTarget = when {
@@ -191,26 +145,32 @@ fun DualChannelConnectContent(
                 initialRemoteTarget.isNotBlank() -> initialRemoteTarget
                 else -> ""
             }
-            when (activeMode) {
-                ConnectMode.Lan -> LanModeContent(
-                    initialAddress = initialLanAddress,
-                    telemetry = telemetry,
-                    onConnect = { onConnect(it, "") },
-                    onDisconnect = onDisconnect,
-                    onMdnsScan = onMdnsScan,
-                    onOpenPairing = onOpenPairing
-                )
-                ConnectMode.Remote -> RemoteModeContent(
-                    initialTarget = effectiveRemoteTarget,
-                    telemetry = telemetry,
-                    recentTunnels = recentTunnels,
-                    onConnect = { onConnect("", it) },
-                    onDisconnect = onDisconnect,
-                    onScanQr = onScanQr,
-                    onOpenPairing = onOpenPairing,
-                    remotePlaceholder = remotePlaceholder
-                )
+            // Collapsing removes this content; the holder keeps what the user typed.
+            formStates.SaveableStateProvider(activeMode.name) {
+                when (activeMode) {
+                    ConnectMode.Lan -> LanModeContent(
+                        initialAddress = initialLanAddress,
+                        telemetry = telemetry,
+                        onConnect = { onConnect(it, "") },
+                        onDisconnect = onDisconnect,
+                        onMdnsScan = onMdnsScan,
+                        onOpenPairing = onOpenPairing,
+                        chrome = chrome
+                    )
+                    ConnectMode.Remote -> RemoteModeContent(
+                        initialTarget = effectiveRemoteTarget,
+                        telemetry = telemetry,
+                        recentTunnels = recentTunnels,
+                        onConnect = { onConnect("", it) },
+                        onDisconnect = onDisconnect,
+                        onScanQr = onScanQr,
+                        onOpenPairing = onOpenPairing,
+                        remotePlaceholder = remotePlaceholder,
+                        chrome = chrome
+                    )
+                }
             }
+        }
         }
     }
 }
